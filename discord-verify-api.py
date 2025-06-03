@@ -43,7 +43,7 @@ def update_discord_profile(guild_id, discord_id, roblox_username, display_name, 
 
     role_id, username_format = settings
     try:
-        headers = {"Authorization": f"Bot {DISCORD_TOKEN}"}
+        headers = {"Authorization": f"Bot {DISCORD_TOKEN}", "Content-Type": "application/json"}
         discord_response = requests.get(f"{DISCORD_API_BASE}/users/{discord_id}", headers=headers)
         discord_name = discord_response.json().get("username", "Unknown") if discord_response.ok else "Unknown"
 
@@ -54,7 +54,6 @@ def update_discord_profile(guild_id, discord_id, roblox_username, display_name, 
         new_nickname = new_nickname.replace("{account-age}", calculate_account_age(roblox_join_date))
         new_nickname = new_nickname.replace("{player-name}", roblox_username)
 
-        headers = {"Authorization": f"Bot {DISCORD_TOKEN}", "Content-Type": "application/json"}
         role_url = f"{DISCORD_API_BASE}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
         nickname_url = f"{DISCORD_API_BASE}/guilds/{guild_id}/members/{discord_id}"
 
@@ -69,6 +68,32 @@ def update_discord_profile(guild_id, discord_id, roblox_username, display_name, 
             print(f"Ошибка при смене ника: {response.status_code} {response.text}")
             return False
         print(f"Ник изменён: {new_nickname} для пользователя {discord_id}")
+
+        # Обновление связей ролей
+        role_connection_url = f"{DISCORD_API_BASE}/users/@me/applications/{DISCORD_CLIENT_ID}/role-connection"
+        connection_data = {
+            "platform_name": "Roblox",
+            "platform_username": roblox_username,
+            "metadata": {"roblox_id": str(roblox_id)}
+        }
+        access_token = requests.post(
+            f"{DISCORD_API_BASE}/oauth2/token",
+            data={
+                "client_id": DISCORD_CLIENT_ID,
+                "client_secret": DISCORD_CLIENT_SECRET,
+                "grant_type": "client_credentials",
+                "scope": "role_connections.write"
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        ).json().get("access_token")
+        response = requests.put(
+            role_connection_url,
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            json=connection_data
+        )
+        if not response.ok:
+            print(f"Ошибка при обновлении связей ролей: {response.status_code} {response.text}")
+            return False
 
         return True
     except Exception as e:
