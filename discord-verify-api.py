@@ -12,6 +12,9 @@ load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_API_BASE = "https://discord.com/api/v10"
+DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
+DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
+DISCORD_REDIRECT_URI = "https://siph-industry.com/verify-options"
 
 def get_verification_settings(guild_id):
     """Получает role_id и username_format из базы"""
@@ -82,6 +85,57 @@ def proxy_roblox_user(user_id):
         return resp
     except Exception as e:
         resp = make_response(jsonify({"error": str(e)}), 500)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
+
+@app.route("/api/oauth/callback", methods=["POST"])
+def oauth_callback():
+    """Обработка OAuth callback"""
+    data = request.json
+    code = data.get("code")
+    if not code:
+        resp = make_response(jsonify({"success": False, "error": "Код не предоставлен"}), 400)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
+
+    try:
+        token_response = requests.post(
+            f"{DISCORD_API_BASE}/oauth2/token",
+            data={
+                "client_id": DISCORD_CLIENT_ID,
+                "client_secret": DISCORD_CLIENT_SECRET,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": DISCORD_REDIRECT_URI
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        token_data = token_response.json()
+        if not token_response.ok:
+            resp = make_response(jsonify({"success": False, "error": token_data.get("error_description", "Ошибка авторизации")}), 400)
+            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+            return resp
+
+        access_token = token_data["access_token"]
+        user_response = requests.get(
+            f"{DISCORD_API_BASE}/users/@me",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        user_data = user_response.json()
+        if not user_response.ok:
+            resp = make_response(jsonify({"success": False, "error": "Ошибка получения данных пользователя"}), 500)
+            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+            return resp
+
+        resp = make_response(jsonify({
+            "success": True,
+            "access_token": access_token,
+            "user_id": user_data["id"]
+        }), 200)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
+    except Exception as e:
+        resp = make_response(jsonify({"success": False, "error": str(e)}), 500)
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
         return resp
 
