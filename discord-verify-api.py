@@ -21,7 +21,7 @@ def get_verification_settings(guild_id):
     )
     return result
 
-def update_discord_profile(guild_id, discord_id, roblox_username):
+def update_discord_profile(guild_id, discord_id, roblox_username, display_name, roblox_id, discord_name):
     """Выдаёт роль и меняет никнейм в Discord"""
     settings = get_verification_settings(guild_id)
     if not settings:
@@ -31,7 +31,11 @@ def update_discord_profile(guild_id, discord_id, roblox_username):
     if not role_id or not username_format:
         return False
 
-    new_nickname = username_format.replace("{roblox-name}", roblox_username)
+    new_nickname = username_format
+    new_nickname = new_nickname.replace("{roblox-name}", roblox_username)
+    new_nickname = new_nickname.replace("{display-name}", display_name)
+    new_nickname = new_nickname.replace("{roblox-id}", str(roblox_id))
+    new_nickname = new_nickname.replace("{discord-name}", discord_name)
 
     headers = {"Authorization": f"Bot {DISCORD_TOKEN}", "Content-Type": "application/json"}
     role_url = f"{DISCORD_API_BASE}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
@@ -81,6 +85,11 @@ def verify_complete():
         return resp
 
     try:
+        # Получаем discord_name
+        headers = {"Authorization": f"Bot {DISCORD_TOKEN}"}
+        user_response = requests.get(f"{DISCORD_API_BASE}/users/{discord_id}", headers=headers)
+        discord_name = user_response.json().get("username", "Unknown") if user_response.ok else "Unknown"
+
         execute_query("""
             INSERT INTO verifications (discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -93,7 +102,7 @@ def verify_complete():
                 status = VALUES(status)
         """, (discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, status))
 
-        if update_discord_profile(guild_id, discord_id, roblox_name):
+        if update_discord_profile(guild_id, discord_id, roblox_name, display_name, roblox_id, discord_name):
             resp = make_response(jsonify({"success": True, "message": "Верификация успешна"}), 200)
             resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
             return resp
