@@ -131,12 +131,14 @@ def oauth_callback():
                 "client_secret": DISCORD_CLIENT_SECRET,
                 "grant_type": "authorization_code",
                 "code": code,
-                "redirect_uri": DISCORD_REDIRECT_URI
+                "redirect_uri": DISCORD_REDIRECT_URI,
+                "scope": "identify guilds guilds.members.read role_connections.write"
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"}
         )
         token_data = token_response.json()
         if not token_response.ok:
+            print(f"OAuth error: {token_data}")
             resp = make_response(jsonify({"success": False, "error": token_data.get("error_description", "Ошибка авторизации")}), 400)
             resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
             return resp
@@ -148,6 +150,7 @@ def oauth_callback():
         )
         user_data = user_response.json()
         if not user_response.ok:
+            print(f"User fetch error: {user_data}")
             resp = make_response(jsonify({"success": False, "error": "Ошибка получения данных пользователя"}), 500)
             resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
             return resp
@@ -160,6 +163,7 @@ def oauth_callback():
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
         return resp
     except Exception as e:
+        print(f"OAuth callback exception: {e}")
         resp = make_response(jsonify({"success": False, "error": str(e)}), 500)
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
         return resp
