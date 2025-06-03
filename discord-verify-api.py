@@ -1,11 +1,9 @@
 import os
 import requests
-import mysql.connector
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
-from urllib.parse import urlparse
 from dotenv import load_dotenv
-from db.db import get_db_connection, execute_query
+from db.db import execute_query
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": ["https://siph-industry.com", "https://siph-api.railway.app"]}})
@@ -50,23 +48,6 @@ def update_discord_profile(guild_id, discord_id, roblox_username):
         return False
 
     return True
-
-@app.route("/proxy/roblox/users", methods=["POST"])
-def proxy_roblox_users():
-    """Прокси для Roblox API: поиск пользователя по нику"""
-    try:
-        response = requests.post(
-            "https://users.roblox.com/v1/usernames/users",
-            json=request.json,
-            headers={"Content-Type": "application/json"}
-        )
-        resp = make_response(jsonify(response.json()), response.status_code)
-        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-        return resp
-    except Exception as e:
-        resp = make_response(jsonify({"error": str(e)}), 500)
-        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-        return resp
 
 @app.route("/proxy/roblox/user/<user_id>", methods=["GET"])
 def proxy_roblox_user(user_id):
