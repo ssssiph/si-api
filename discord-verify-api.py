@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 from db.db import execute_query
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": ["https://siph-industry.com"]}})
@@ -21,37 +22,57 @@ def get_verification_settings(guild_id):
     )
     return result
 
-def update_discord_profile(guild_id, discord_id, roblox_username, display_name, roblox_id, discord_name):
-    """Выдаёт роль и меняет никнейм в Discord"""
+def calculate_account_age(join_date):
+    """Вычисляет возраст аккаунта в днях"""
+    try:
+        join_date = datetime.strptime(join_date, "%Y-%m-%d")
+        today = datetime.now()
+        age = (today - join_date).days
+        return str(age)
+    except:
+        return "0"
+
+def update_discord_profile(guild_id, discord_id, roblox_username, display_name, roblox_id, roblox_join_date):
+    """Выдает роль и меняет никнейм в Discord"""
     settings = get_verification_settings(guild_id)
     if not settings:
         return False
 
     role_id, username_format = settings
-    if not role_id or not username_format:
+    try:
+        # Получаем Discord имя
+        headers = {"Authorization": f"Bot {DISCORD_TOKEN}"}
+        discord_response = requests.get(f"{DISCORD_API_BASE}/users/{discord_id}", headers=headers)
+        discord_name = discord_response.json().get("username", "Unknown") if discord_response.ok else "Unknown"
+
+        # Форматируем никнейм
+        new_nickname = username_format
+        new_nickname = new_nickname.replace("{smart-name}", f"{display_name} (@{roblox_username})")
+        new_nickname = new_nickname.replace("{display-name}", display_name)
+        new_nickname = new_nickname.replace("{user-id}", str(roblox_id))
+        new_nickname = new_nickname.replace("{account-age}", calculate_account_age(roblox_join_date))
+        new_nickname = new_nickname.replace("{player-name}", roblox_username)
+
+        headers = {"Authorization": f"Bot {DISCORD_TOKEN}", "Content-Type": "application/json"}
+        role_url = f"{DISCORD_API_BASE}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
+        nickname_url = f"{DISCORD_API_BASE}/guilds/{guild_id}/members/{discord_id}"
+
+        response = requests.put(role_url, headers=headers)
+        if not response.ok:
+            print(f"Ошибка при выдачи роли: {response.status_code} {response.text}")
+            return False
+        print(f"Роль выдана: {discord_id} на сервере {guild_id}")
+
+        response = requests.patch(nickname_url, headers=headers, json={"nick": "new_nickname[:32]})
+        if not response.ok:
+            print(f"Ошибка при смене ника: {response.status_code} {response.text}")
+            return False
+        print(f"Ник изменён: {new_nickname} для пользователя {discord_id}")
+
+        return True
+    except Exception as e:
+        print(f"Ошибка обновления профиля: {e}")
         return False
-
-    new_nickname = username_format
-    new_nickname = new_nickname.replace("{roblox-name}", roblox_username)
-    new_nickname = new_nickname.replace("{display-name}", display_name)
-    new_nickname = new_nickname.replace("{roblox-id}", str(roblox_id))
-    new_nickname = new_nickname.replace("{discord-name}", discord_name)
-
-    headers = {"Authorization": f"Bot {DISCORD_TOKEN}", "Content-Type": "application/json"}
-    role_url = f"{DISCORD_API_BASE}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
-    nickname_url = f"{DISCORD_API_BASE}/guilds/{guild_id}/members/{discord_id}"
-
-    response = requests.put(role_url, headers=headers)
-    if not response.ok:
-        print(f"Ошибка выдачи роли: {response.status_code} {response.text}")
-        return False
-
-    response = requests.patch(nickname_url, headers=headers, json={"nick": new_nickname[:32]})
-    if not response.ok:
-        print(f"Ошибка смены ника: {response.status_code} {response.text}")
-        return False
-
-    return True
 
 @app.route("/proxy/roblox/user/<user_id>", methods=["GET"])
 def proxy_roblox_user(user_id):
@@ -85,11 +106,6 @@ def verify_complete():
         return resp
 
     try:
-        # Получаем discord_name
-        headers = {"Authorization": f"Bot {DISCORD_TOKEN}"}
-        user_response = requests.get(f"{DISCORD_API_BASE}/users/{discord_id}", headers=headers)
-        discord_name = user_response.json().get("username", "Unknown") if user_response.ok else "Unknown"
-
         execute_query("""
             INSERT INTO verifications (discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -102,7 +118,7 @@ def verify_complete():
                 status = VALUES(status)
         """, (discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, status))
 
-        if update_discord_profile(guild_id, discord_id, roblox_name, display_name, roblox_id, discord_name):
+        if update_discord_profile(guild_id, discord_id, roblox_name, display_name, roblox_id, roblox_join_date):
             resp = make_response(jsonify({"success": True, "message": "Верификация успешна"}), 200)
             resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
             return resp
