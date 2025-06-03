@@ -1,37 +1,26 @@
 import os
 import requests
 import mysql.connector
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+from db.db import get_db_connection, execute_query
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "https://siph-industry.com"}})
 load_dotenv()
-
-def get_db_connection():
-    """Создание соединения с базой данных"""
-    url = urlparse(os.getenv("DATABASE_URL"))
-    return mysql.connector.connect(
-        host=url.hostname,
-        user=url.username,
-        password=url.password,
-        database=url.path[1:],
-        port=url.port or 3306
-    )
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_API_BASE = "https://discord.com/api/v10"
 
 def get_verification_settings(guild_id):
     """Получает role_id и username_format из базы"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT role_id, username_format FROM verification_settings WHERE guild_id = %s", (guild_id,))
-    result = cursor.fetchone()
-    cursor.close()
-    conn.close()
+    result = execute_query(
+        "SELECT role_id, username_format FROM verification_settings WHERE guild_id = %s",
+        (guild_id,),
+        fetch_one=True
+    )
     return result
 
 def update_discord_profile(guild_id, discord_id, roblox_username):
@@ -71,18 +60,26 @@ def proxy_roblox_users():
             json=request.json,
             headers={"Content-Type": "application/json"}
         )
-        return jsonify(response.json()), response.status_code
+        resp = make_response(jsonify(response.json()), response.status_code)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        resp = make_response(jsonify({"error": str(e)}), 500)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
 
 @app.route("/proxy/roblox/user/<user_id>", methods=["GET"])
 def proxy_roblox_user(user_id):
     """Прокси для Roblox API: получение профиля пользователя"""
     try:
         response = requests.get(f"https://users.roblox.com/v1/users/{user_id}")
-        return jsonify(response.json()), response.status_code
+        resp = make_response(jsonify(response.json()), response.status_code)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        resp = make_response(jsonify({"error": str(e)}), 500)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
 
 @app.route("/api/verify/complete", methods=["POST"])
 def verify_complete():
@@ -98,12 +95,12 @@ def verify_complete():
     status = data.get("status", "verified")
 
     if not all([discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, guild_id]):
-        return jsonify({"success": False, "error": "Недостаточно данных"}), 400
+        resp = make_response(jsonify({"success": False, "error": "Недостаточно данных"}), 400)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
+        execute_query("""
             INSERT INTO verifications (discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
@@ -114,18 +111,21 @@ def verify_complete():
                 roblox_join_date = VALUES(roblox_join_date),
                 status = VALUES(status)
         """, (discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, status))
-        conn.commit()
-        cursor.close()
-        conn.close()
 
         if update_discord_profile(guild_id, discord_id, roblox_name):
-            return jsonify({"success": True, "message": "Верификация успешна"}), 200
+            resp = make_response(jsonify({"success": True, "message": "Верификация успешна"}), 200)
+            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+            return resp
         else:
-            return jsonify({"success": False, "error": "Ошибка обновления профиля Discord"}), 500
+            resp = make_response(jsonify({"success": False, "error": "Ошибка обновления профиля Discord"}), 500)
+            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+            return resp
 
     except Exception as e:
         print(f"Ошибка верификации: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        resp = make_response(jsonify({"success": False, "error": str(e)}), 500)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
