@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from db.db import get_db_connection, execute_query
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "https://siph-industry.com"}})
+CORS(app, resources={r"/api/*": {"origins": ["https://siph-industry.com", "https://siph-api.railway.app"]}})
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
