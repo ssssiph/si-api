@@ -115,33 +115,31 @@ def proxy_roblox_user(user_id):
 
 @app.route("/api/oauth/callback", methods=["POST"])
 def oauth_callback():
-    """Обработка OAuth callback"""
     data = request.json
     code = data.get("code")
-    if not code:
-        resp = make_response(jsonify({"success": False, "error": "Код не предоставлен"}), 400)
+    print(f"Received code: {code}")
+    token_response = requests.post(
+        f"{DISCORD_API_BASE}/oauth2/token",
+        data={
+            "client_id": DISCORD_CLIENT_ID,
+            "client_secret": DISCORD_CLIENT_SECRET,
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": DISCORD_REDIRECT_URI,
+            "scope": "identify guilds guilds.members.read role_connections.write"
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    print(f"Token Request URL: {token_response.request.url}")
+    print(f"Token Request Body: {token_response.request.body}")
+    print(f"Token Response Status: {token_response.status_code}")
+    print(f"Token Response Text: {token_response.text}")
+    token_data = token_response.json()
+    if not token_response.ok:
+        print(f"OAuth error: {token_data}")
+        resp = make_response(jsonify({"success": False, "error": token_data.get("error_description", "Ошибка авторизации")}), 400)
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
         return resp
-
-    try:
-        token_response = requests.post(
-            f"{DISCORD_API_BASE}/oauth2/token",
-            data={
-                "client_id": DISCORD_CLIENT_ID,
-                "client_secret": DISCORD_CLIENT_SECRET,
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": DISCORD_REDIRECT_URI,
-                "scope": "identify guilds guilds.members.read role_connections.write"
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        token_data = token_response.json()
-        if not token_response.ok:
-            print(f"OAuth error: {token_data}")
-            resp = make_response(jsonify({"success": False, "error": token_data.get("error_description", "Ошибка авторизации")}), 400)
-            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-            return resp
 
         access_token = token_data["access_token"]
         user_response = requests.get(
