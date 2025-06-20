@@ -3,8 +3,11 @@ import requests
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
-from db.db import execute_query
+from db.db import execute_query, init_db  # Импортируем init_db
 from datetime import datetime
+
+# Вызываем init_db при запуске приложения
+init_db()
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": ["https://siph-industry.com"]}})
