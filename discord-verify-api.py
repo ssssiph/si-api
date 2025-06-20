@@ -3,10 +3,10 @@ import requests
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
-from db.db import execute_query, init_db  # Импортируем init_db
+from db.db import execute_query, init_db
 from datetime import datetime
 
-# Вызываем init_db при запуске приложения
+# Вызываем init_db при запуске приложения (для других таблиц)
 init_db()
 
 app = Flask(__name__)
@@ -173,7 +173,7 @@ def oauth_callback():
 
 @app.route("/api/verify/code", methods=["POST"])
 def generate_verify_code():
-    """Генерирует код верификации"""
+    """Генерирует код верификации (без сохранения в базу)"""
     data = request.json
     discord_id = data.get("discord_id")
     guild_id = data.get("guild_id")
@@ -184,45 +184,26 @@ def generate_verify_code():
 
     import uuid
     code = str(uuid.uuid4())[:8]
-    try:
-        execute_query(
-            "INSERT INTO verification_codes (discord_id, guild_id, code, created_at) VALUES (%s, %s, %s, NOW())",
-            (discord_id, guild_id, code)
-        )
-        resp = make_response(jsonify({"success": True, "code": code}), 200)
-        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-        return resp
-    except Exception as e:
-        resp = make_response(jsonify({"success": False, "error": str(e)}), 500)
-        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-        return resp
+    resp = make_response(jsonify({"success": True, "code": code}), 200)
+    resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+    return resp
 
 @app.route("/api/verify/check", methods=["POST"])
 def check_verify_code():
-    """Проверяет код в профиле Roblox"""
+    """Проверяет код в профиле Roblox (без проверки в базе)"""
     data = request.json
     discord_id = data.get("discord_id")
     guild_id = data.get("guild_id")
     roblox_id = data.get("roblox_id")
     roblox_name = data.get("roblox_name")
+    code = data.get("code")  # Код передаётся клиентом
 
-    if not all([discord_id, guild_id, roblox_id, roblox_name]):
+    if not all([discord_id, guild_id, roblox_id, roblox_name, code]):
         resp = make_response(jsonify({"success": False, "error": "Недостаточно данных"}), 400)
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
         return resp
 
     try:
-        code_result = execute_query(
-            "SELECT code FROM verification_codes WHERE discord_id = %s AND guild_id = %s AND created_at > NOW() - INTERVAL 1 HOUR",
-            (discord_id, guild_id),
-            fetch_one=True
-        )
-        if not code_result:
-            resp = make_response(jsonify({"success": False, "error": "Код не найден или истёк"}), 400)
-            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-            return resp
-
-        code = code_result[0]
         roblox_response = requests.get(f"https://users.roblox.com/v1/users/{roblox_id}")
         if not roblox_response.ok:
             resp = make_response(jsonify({"success": False, "error": "Ошибка проверки Roblox"}), 500)
@@ -244,7 +225,6 @@ def check_verify_code():
             """, (discord_id, roblox_id, roblox_name, roblox_data.get("displayName", roblox_name), roblox_data.get("age", 0), roblox_data.get("created", ""), "verified"))
 
             if update_discord_profile(guild_id, discord_id, roblox_name, roblox_data.get("displayName", roblox_name), roblox_id, roblox_data.get("created", "")):
-                execute_query("DELETE FROM verification_codes WHERE discord_id = %s AND guild_id = %s", (discord_id, guild_id))
                 resp = make_response(jsonify({"success": True, "message": "Верификация успешна"}), 200)
                 resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
                 return resp
