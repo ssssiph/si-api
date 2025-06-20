@@ -13,7 +13,7 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_API_BASE = "https://discord.com/api/v10"
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")  # Изменено с DISCORD_CLIENT_SECRET на CLIENT_SECRET
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 DISCORD_REDIRECT_URI = "https://siph-industry.com/verify-options"
 
 def get_verification_settings(guild_id):
@@ -80,7 +80,7 @@ def update_discord_profile(guild_id, discord_id, roblox_username, display_name, 
             f"{DISCORD_API_BASE}/oauth2/token",
             data={
                 "client_id": DISCORD_CLIENT_ID,
-                "client_secret": CLIENT_SECRET,  # Изменено с DISCORD_CLIENT_SECRET на CLIENT_SECRET
+                "client_secret": CLIENT_SECRET,
                 "grant_type": "client_credentials",
                 "scope": "role_connections.write"
             },
@@ -115,58 +115,58 @@ def proxy_roblox_user(user_id):
 
 @app.route("/api/oauth/callback", methods=["POST"])
 def oauth_callback():
-    data = request.json
-    code = data.get("code")
-    print(f"Received code: {code}")
-    token_response = requests.post(
-        f"{DISCORD_API_BASE}/oauth2/token",
-        data={
-            "client_id": DISCORD_CLIENT_ID,
-            "client_secret": CLIENT_SECRET,  # Изменено с DISCORD_CLIENT_SECRET на CLIENT_SECRET
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": DISCORD_REDIRECT_URI,
-            "scope": "identify guilds guilds.members.read role_connections.write"
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
-    )
-    print(f"Token Request URL: {token_response.request.url}")
-    print(f"Token Request Body: {token_response.request.body}")
-    print(f"Token Response Status: {token_response.status_code}")
-    print(f"Token Response Text: {token_response.text}")
-    token_data = token_response.json()
-    if not token_response.ok:
-        print(f"OAuth error: {token_data}")
-        resp = make_response(jsonify({"success": False, "error": token_data.get("error_description", "Ошибка авторизации")}), 400)
+    try:
+        data = request.json
+        code = data.get("code")
+        print(f"Received code: {code}")
+        token_response = requests.post(
+            f"{DISCORD_API_BASE}/oauth2/token",
+            data={
+                "client_id": DISCORD_CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": DISCORD_REDIRECT_URI,
+                "scope": "identify guilds guilds.members.read role_connections.write"
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        print(f"Token Request URL: {token_response.request.url}")
+        print(f"Token Request Body: {token_response.request.body}")
+        print(f"Token Response Status: {token_response.status_code}")
+        print(f"Token Response Text: {token_response.text}")
+        token_data = token_response.json()
+        if not token_response.ok:
+            print(f"OAuth error: {token_data}")
+            resp = make_response(jsonify({"success": False, "error": token_data.get("error_description", "Ошибка авторизации")}), 400)
+            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+            return resp
+
+        # Успешный случай обработки токена
+        access_token = token_data["access_token"]
+        user_response = requests.get(
+            f"{DISCORD_API_BASE}/users/@me",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        user_data = user_response.json()
+        if not user_response.ok:
+            print(f"User fetch error: {user_data}")
+            resp = make_response(jsonify({"success": False, "error": "Ошибка получения данных пользователя"}), 500)
+            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+            return resp
+
+        resp = make_response(jsonify({
+            "success": True,
+            "access_token": access_token,
+            "user_id": user_data["id"]
+        }), 200)
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
         return resp
-
-    # Успешный случай обработки токена
-    access_token = token_data["access_token"]
-    user_response = requests.get(
-        f"{DISCORD_API_BASE}/users/@me",
-        headers={"Authorization": f"Bearer {access_token}"}
-    )
-    user_data = user_response.json()
-    if not user_response.ok:
-        print(f"User fetch error: {user_data}")
-        resp = make_response(jsonify({"success": False, "error": "Ошибка получения данных пользователя"}), 500)
+    except Exception as e:
+        print(f"OAuth callback exception: {e}")
+        resp = make_response(jsonify({"success": False, "error": str(e)}), 500)
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
         return resp
-
-    resp = make_response(jsonify({
-        "success": True,
-        "access_token": access_token,
-        "user_id": user_data["id"]
-    }), 200)
-    resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-    return resp
-
-except Exception as e:
-    print(f"OAuth callback exception: {e}")
-    resp = make_response(jsonify({"success": False, "error": str(e)}), 500)
-    resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-    return resp
 
 @app.route("/api/verify/code", methods=["POST"])
 def generate_verify_code():
