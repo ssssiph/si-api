@@ -141,30 +141,32 @@ def oauth_callback():
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
         return resp
 
-        access_token = token_data["access_token"]
-        user_response = requests.get(
-            f"{DISCORD_API_BASE}/users/@me",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        user_data = user_response.json()
-        if not user_response.ok:
-            print(f"User fetch error: {user_data}")
-            resp = make_response(jsonify({"success": False, "error": "Ошибка получения данных пользователя"}), 500)
-            resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-            return resp
+    # Успешный случай обработки токена
+    access_token = token_data["access_token"]
+    user_response = requests.get(
+        f"{DISCORD_API_BASE}/users/@me",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+    user_data = user_response.json()
+    if not user_response.ok:
+        print(f"User fetch error: {user_data}")
+        resp = make_response(jsonify({"success": False, "error": "Ошибка получения данных пользователя"}), 500)
+        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+        return resp
 
-        resp = make_response(jsonify({
-            "success": True,
-            "access_token": access_token,
-            "user_id": user_data["id"]
-        }), 200)
-        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-        return resp
-    except Exception as e:
-        print(f"OAuth callback exception: {e}")
-        resp = make_response(jsonify({"success": False, "error": str(e)}), 500)
-        resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-        return resp
+    resp = make_response(jsonify({
+        "success": True,
+        "access_token": access_token,
+        "user_id": user_data["id"]
+    }), 200)
+    resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+    return resp
+
+except Exception as e:
+    print(f"OAuth callback exception: {e}")
+    resp = make_response(jsonify({"success": False, "error": str(e)}), 500)
+    resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+    return resp
 
 @app.route("/api/verify/code", methods=["POST"])
 def generate_verify_code():
