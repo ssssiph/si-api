@@ -13,7 +13,7 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_API_BASE = "https://discord.com/api/v10"
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
-DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")  # Изменено с DISCORD_CLIENT_SECRET на CLIENT_SECRET
 DISCORD_REDIRECT_URI = "https://siph-industry.com/verify-options"
 
 def get_verification_settings(guild_id):
@@ -80,7 +80,7 @@ def update_discord_profile(guild_id, discord_id, roblox_username, display_name, 
             f"{DISCORD_API_BASE}/oauth2/token",
             data={
                 "client_id": DISCORD_CLIENT_ID,
-                "client_secret": DISCORD_CLIENT_SECRET,
+                "client_secret": CLIENT_SECRET,  # Изменено с DISCORD_CLIENT_SECRET на CLIENT_SECRET
                 "grant_type": "client_credentials",
                 "scope": "role_connections.write"
             },
@@ -122,7 +122,7 @@ def oauth_callback():
         f"{DISCORD_API_BASE}/oauth2/token",
         data={
             "client_id": DISCORD_CLIENT_ID,
-            "client_secret": DISCORD_CLIENT_SECRET,
+            "client_secret": CLIENT_SECRET,  # Изменено с DISCORD_CLIENT_SECRET на CLIENT_SECRET
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": DISCORD_REDIRECT_URI,
