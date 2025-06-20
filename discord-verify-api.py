@@ -192,6 +192,7 @@ def generate_verify_code():
 def check_verify_code():
     """Проверяет код в профиле Roblox (без проверки в базе)"""
     data = request.json
+    print(f"Received data: {data}")  # Отладочный вывод
     discord_id = data.get("discord_id")
     guild_id = data.get("guild_id")
     roblox_id = data.get("roblox_id")
