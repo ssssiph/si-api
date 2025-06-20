@@ -173,10 +173,11 @@ def oauth_callback():
 
 @app.route("/api/verify/code", methods=["POST"])
 def generate_verify_code():
-    """Генерирует код верификации (без сохранения в базу)"""
+    """Генерирует код верификации для метода 'code'"""
     data = request.json
     discord_id = data.get("discord_id")
     guild_id = data.get("guild_id")
+
     if not discord_id or not guild_id:
         resp = make_response(jsonify({"success": False, "error": "Недостаточно данных"}), 400)
         resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
@@ -184,20 +185,25 @@ def generate_verify_code():
 
     import uuid
     code = str(uuid.uuid4())[:8]
-    resp = make_response(jsonify({"success": True, "code": code}), 200)
+    resp = make_response(jsonify({
+        "success": True,
+        "code": code,
+        "method": "code"
+    }), 200)
     resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
     return resp
 
 @app.route("/api/verify/check", methods=["POST"])
 def check_verify_code():
-    """Проверяет код в профиле Roblox (без проверки в базе)"""
+    """Проверяет верификацию в зависимости от метода"""
     data = request.json
     print(f"Received data: {data}")  # Отладочный вывод
     discord_id = data.get("discord_id")
     guild_id = data.get("guild_id")
     roblox_id = data.get("roblox_id")
     roblox_name = data.get("roblox_name")
-    code = data.get("code")  # Код передаётся клиентом
+    code = data.get("code")
+    method = data.get("method", "code")  # По умолчанию метод 'code'
 
     if not all([discord_id, guild_id, roblox_id, roblox_name, code]):
         resp = make_response(jsonify({"success": False, "error": "Недостаточно данных"}), 400)
@@ -205,36 +211,45 @@ def check_verify_code():
         return resp
 
     try:
-        roblox_response = requests.get(f"https://users.roblox.com/v1/users/{roblox_id}")
-        if not roblox_response.ok:
-            resp = make_response(jsonify({"success": False, "error": "Ошибка проверки Roblox"}), 500)
+        if method == "code":
+            roblox_response = requests.get(f"https://users.roblox.com/v1/users/{roblox_id}")
+            if not roblox_response.ok:
+                resp = make_response(jsonify({"success": False, "error": "Ошибка проверки Roblox"}), 500)
+                resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+                return resp
+
+            roblox_data = roblox_response.json()
+            if code in roblox_data.get("description", ""):
+                execute_query("""
+                    INSERT INTO verifications (discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        roblox_id = VALUES(roblox_id),
+                        roblox_name = VALUES(roblox_name),
+                        display_name = VALUES(display_name),
+                        roblox_age = VALUES(roblox_age),
+                        roblox_join_date = VALUES(roblox_join_date),
+                        status = VALUES(status)
+                """, (discord_id, roblox_id, roblox_name, roblox_data.get("displayName", roblox_name), roblox_data.get("age", 0), roblox_data.get("created", ""), "verified"))
+
+                if update_discord_profile(guild_id, discord_id, roblox_name, roblox_data.get("displayName", roblox_name), roblox_id, roblox_data.get("created", "")):
+                    resp = make_response(jsonify({"success": True, "message": "Верификация успешна"}), 200)
+                    resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+                    return resp
+                else:
+                    resp = make_response(jsonify({"success": False, "error": "Ошибка обновления профиля Discord"}), 500)
+                    resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+                    return resp
+            else:
+                resp = make_response(jsonify({"success": False, "error": "Код не найден в профиле Roblox"}), 400)
+                resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
+                return resp
+        elif method == "game":
+            resp = make_response(jsonify({"success": False, "error": "Верификация через игру пока недоступна"}), 400)
             resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
             return resp
-
-        roblox_data = roblox_response.json()
-        if code in roblox_data.get("description", ""):
-            execute_query("""
-                INSERT INTO verifications (discord_id, roblox_id, roblox_name, display_name, roblox_age, roblox_join_date, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    roblox_id = VALUES(roblox_id),
-                    roblox_name = VALUES(roblox_name),
-                    display_name = VALUES(display_name),
-                    roblox_age = VALUES(roblox_age),
-                    roblox_join_date = VALUES(roblox_join_date),
-                    status = VALUES(status)
-            """, (discord_id, roblox_id, roblox_name, roblox_data.get("displayName", roblox_name), roblox_data.get("age", 0), roblox_data.get("created", ""), "verified"))
-
-            if update_discord_profile(guild_id, discord_id, roblox_name, roblox_data.get("displayName", roblox_name), roblox_id, roblox_data.get("created", "")):
-                resp = make_response(jsonify({"success": True, "message": "Верификация успешна"}), 200)
-                resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-                return resp
-            else:
-                resp = make_response(jsonify({"success": False, "error": "Ошибка обновления профиля Discord"}), 500)
-                resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
-                return resp
         else:
-            resp = make_response(jsonify({"success": False, "error": "Код не найден в профиле Roblox"}), 400)
+            resp = make_response(jsonify({"success": False, "error": "Недопустимый метод верификации"}), 400)
             resp.headers['Access-Control-Allow-Origin'] = 'https://siph-industry.com'
             return resp
     except Exception as e:
